@@ -13,6 +13,28 @@ A cross-platform personal finance and expense tracking application built with Fl
 
 ---
 
+### 🖼️ Preview (Not the lastest version)
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/1.png" width="75%"><br>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/2.png" width="75%"><br>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/3.png" width="75%"><br>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/4.png" width="75%"><br>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## 🚀 Installation
 
 ### Android
