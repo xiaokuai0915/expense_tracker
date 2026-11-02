@@ -396,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showAboutDialog(
       context: context,
       applicationName: 'Expense Tracker',
-      applicationVersion: 'v1.0.0 (Open Source)',
+      applicationVersion: 'v1.1.0 (Open Source)',
       applicationIcon: const Icon(Icons.account_balance_wallet, size: 40, color: Colors.deepPurpleAccent),
       children: const [
         SizedBox(height: 12),

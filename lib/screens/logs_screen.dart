@@ -16,6 +16,14 @@ class LogsScreen extends StatefulWidget {
 class _LogsScreenState extends State<LogsScreen> {
   final StorageService _storage = StorageService();
   LogGroupBy _groupBy = LogGroupBy.none;
+  final Set<int> _selectedCategoryIds = {};
+  final ScrollController _chipScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _chipScrollController.dispose();
+    super.dispose();
+  }
 
   String _formatDateTime(DateTime dt) {
     final y = dt.year;
@@ -51,9 +59,16 @@ class _LogsScreenState extends State<LogsScreen> {
     }
   }
 
+  List<Expense> get _filteredExpenses {
+    if (_selectedCategoryIds.isEmpty) {
+      return _storage.expenses;
+    }
+    return _storage.expenses.where((exp) => _selectedCategoryIds.contains(exp.categoryId)).toList();
+  }
+
   Map<String, List<Expense>> _getGroupedExpenses() {
     final Map<String, List<Expense>> groups = {};
-    for (var exp in _storage.expenses) {
+    for (var exp in _filteredExpenses) {
       String key;
       if (_groupBy == LogGroupBy.month) {
         final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -73,6 +88,55 @@ class _LogsScreenState extends State<LogsScreen> {
       groups[key]!.add(exp);
     }
     return groups;
+  }
+
+  Map<String, double> _calculateStatistics() {
+    final filtered = _filteredExpenses;
+    if (filtered.isEmpty) {
+      return {
+        'weekTotal': 0.0,
+        'monthTotal': 0.0,
+        'yearTotal': 0.0,
+        'weeklyAvg': 0.0,
+        'monthlyAvg': 0.0,
+      };
+    }
+
+    final now = DateTime.now();
+    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final startOfYear = DateTime(now.year, 1, 1);
+
+    double weekTotal = 0.0;
+    double monthTotal = 0.0;
+    double yearTotal = 0.0;
+
+    for (var exp in filtered) {
+      if (exp.date.isAfter(startOfWeek) || exp.date.isAtSameMomentAs(startOfWeek)) {
+        weekTotal += exp.amount;
+      }
+      if (exp.date.isAfter(startOfMonth) || exp.date.isAtSameMomentAs(startOfMonth)) {
+        monthTotal += exp.amount;
+      }
+      if (exp.date.isAfter(startOfYear) || exp.date.isAtSameMomentAs(startOfYear)) {
+        yearTotal += exp.amount;
+      }
+    }
+
+    final daysPassed = now.difference(startOfYear).inDays + 1;
+    final weeksPassed = (daysPassed / 7.0).ceil();
+    final currentMonth = now.month;
+
+    final weeklyAvg = yearTotal / (weeksPassed > 0 ? weeksPassed : 1);
+    final monthlyAvg = yearTotal / (currentMonth > 0 ? currentMonth : 1);
+
+    return {
+      'weekTotal': weekTotal,
+      'monthTotal': monthTotal,
+      'yearTotal': yearTotal,
+      'weeklyAvg': weeklyAvg,
+      'monthlyAvg': monthlyAvg,
+    };
   }
 
   Future<String?> _showNewCategoryDialog(BuildContext context) async {
@@ -327,9 +391,108 @@ class _LogsScreenState extends State<LogsScreen> {
     );
   }
 
+  Widget _buildSummarySection() {
+    final stats = _calculateStatistics();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      color: Theme.of(context).cardColor,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem('Week Total', stats['weekTotal']!),
+                _buildStatItem('Month Total', stats['monthTotal']!),
+                _buildStatItem('Year Total', stats['yearTotal']!),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem('Weekly Avg (YTD)', stats['weeklyAvg']!),
+                _buildStatItem('Monthly Avg (YTD)', stats['monthlyAvg']!),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, double value) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+        const SizedBox(height: 2),
+        Text(
+          '${_storage.currency} ${value.toStringAsFixed(2)}',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: RawScrollbar(
+        controller: _chipScrollController,
+        thumbVisibility: true,
+        trackVisibility: true,
+        thickness: 6,
+        radius: const Radius.circular(4),
+        padding: const EdgeInsets.only(top: 36),
+        child: SingleChildScrollView(
+          controller: _chipScrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+          child: Row(
+            children: [
+              FilterChip(
+                label: const Text('All Tags'),
+                selected: _selectedCategoryIds.isEmpty,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _selectedCategoryIds.clear();
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              ..._storage.categories.map((cat) {
+                final isSelected = _selectedCategoryIds.contains(cat.id);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: FilterChip(
+                    label: Text(cat.name),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedCategoryIds.add(cat.id!);
+                        } else {
+                          _selectedCategoryIds.remove(cat.id);
+                        }
+                      });
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupedMap = _getGroupedExpenses();
+    final filteredList = _filteredExpenses;
 
     return Scaffold(
       body: SafeArea(
@@ -342,10 +505,29 @@ class _LogsScreenState extends State<LogsScreen> {
                 children: [
                   const Text('Group By:', style: TextStyle(fontWeight: FontWeight.bold)),
                   SegmentedButton<LogGroupBy>(
+                    showSelectedIcon: false,
                     segments: const [
-                      ButtonSegment(value: LogGroupBy.none, label: Text('All')),
-                      ButtonSegment(value: LogGroupBy.month, label: Text('Month')),
-                      ButtonSegment(value: LogGroupBy.week, label: Text('Week')),
+                      ButtonSegment(
+                        value: LogGroupBy.none,
+                        label: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text('All'),
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: LogGroupBy.month,
+                        label: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text('Month'),
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: LogGroupBy.week,
+                        label: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text('Week'),
+                        ),
+                      ),
                     ],
                     selected: {_groupBy},
                     onSelectionChanged: (Set<LogGroupBy> newSelection) {
@@ -357,18 +539,20 @@ class _LogsScreenState extends State<LogsScreen> {
                 ],
               ),
             ),
+            _buildFilterChips(),
+            _buildSummarySection(),
             Expanded(
               child: Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 600),
-                  child: _storage.expenses.isEmpty
+                  child: filteredList.isEmpty
                       ? const Center(child: Text('No expense records found', style: TextStyle(color: Colors.grey)))
                       : _groupBy == LogGroupBy.none
                           ? ListView.builder(
                               padding: const EdgeInsets.all(16),
-                              itemCount: _storage.expenses.length,
-                              itemBuilder: (ctx, index) => _buildExpenseTile(_storage.expenses[index]),
+                              itemCount: filteredList.length,
+                              itemBuilder: (ctx, index) => _buildExpenseTile(filteredList[index]),
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.all(16),
